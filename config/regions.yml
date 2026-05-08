@@ -1,0 +1,19 @@
+# Governed reporting regions
+# Adding a new region requires adding it here and in suburbs.csv only
+# No code changes required for new regions
+
+regions:
+  - region_id: eastern_suburbs
+    region_name: Eastern Suburbs
+    display_name: Eastern Suburbs, NSW
+    active: true
+
+  - region_id: central_coast
+    region_name: Central Coast
+    display_name: Central Coast, NSW
+    active: true
+
+  - region_id: inner_west
+    region_name: Inner West
+    display_name: Inner West, NSW
+    active: true

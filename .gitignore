@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+
+# DuckDB
+*.duckdb
+*.duckdb.wal
+
+# Data zones - never push raw or curated data
+data/raw/
+data/stage/
+data/curated/
+data/analytics/
+data/ops/
+
+# Published JSON is pushed explicitly by the pipeline
+# so we track it - do not add data/published/ here
+
+# Excel diagnostic workbook - local only
+*.xlsx
+
+# Logs
+*.log
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# Environment
+.env

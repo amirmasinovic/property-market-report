@@ -1,0 +1,61 @@
+# Metric thresholds and governance rules
+# Any change to these values must be documented as a formal revision
+
+reporting:
+  # Minimum annual sales for a suburb to appear in chart
+  chart_min_annual_sales: 100
+  # Minimum years of valid data before chart renders normally
+  chart_min_years: 5
+  # Minimum rolling 52-week sales for suburb to be included in reporting
+  suburb_inclusion_min_52w_sales: 50
+
+adaptive_window:
+  # Minimum transactions for a rolling window to be valid
+  min_transactions: 100
+  # Windows tried in order - first meeting threshold is used
+  windows_weeks:
+    - 12
+    - 26
+    - 52
+    - 104   # 2 years
+    - 260   # 5 years
+
+price_table:
+  # Minimum transactions for each period to display a value
+  min_transactions: 100
+  # Display value when threshold not met
+  suppressed_display: "N/A"
+  # Periods to calculate
+  periods:
+    - label: "3 months"
+      weeks: 13
+    - label: "12 months"
+      weeks: 52
+    - label: "3 years"
+      weeks: 156
+    - label: "5 years"
+      weeks: 260
+    - label: "10 years"
+      weeks: 520
+    - label: "20 years"
+      weeks: 1040
+
+narrative:
+  # Activity surge threshold
+  surge_multiplier: 1.5
+  # Activity slowdown threshold
+  slowdown_multiplier: 0.5
+  # Maximum narrative paragraphs
+  max_paragraphs: 3
+  # Maximum narrative words
+  max_words: 120
+
+data_quality:
+  # Minimum valid sale price
+  min_sale_price: 10000
+  # Maximum plausible sale price
+  max_sale_price: 100000000
+  # Minimum valid land size in sqm
+  min_land_size_sqm: 1
+  # Maximum valid land size in sqm
+  max_land_size_sqm: 100000000
