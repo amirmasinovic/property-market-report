@@ -1,0 +1,102 @@
+# PMR - Inspect raw_sales schema and property categories
+# Run from: C:\PMR\repo
+# Save as: inspect_db.ps1
+
+$python = "C:\PMR\venv\Scripts\python.exe"
+$db     = "C:\PMR\pmr.duckdb"
+
+$script = @"
+import duckdb, json
+conn = duckdb.connect(r'$db', read_only=True)
+
+print('=' * 60)
+print('RAW_SALES COLUMNS')
+print('=' * 60)
+cols = conn.execute("PRAGMA table_info('raw_sales')").fetchall()
+for c in cols:
+    print(f"  {c[1]:30s} {c[2]}")
+
+print()
+print('=' * 60)
+print('TOTAL ROW COUNT')
+print('=' * 60)
+n = conn.execute("SELECT COUNT(*) FROM raw_sales").fetchone()[0]
+print(f"  {n:,} rows")
+
+print()
+print('=' * 60)
+print('DISTINCT property_category VALUES')
+print('=' * 60)
+rows = conn.execute("""
+    SELECT property_category, COUNT(*) as cnt
+    FROM raw_sales
+    GROUP BY property_category
+    ORDER BY cnt DESC
+""").fetchall()
+for r in rows:
+    print(f"  {str(r[0]):20s} {r[1]:>10,}")
+
+print()
+print('=' * 60)
+print('DISTINCT property_description VALUES (top 30)')
+print('=' * 60)
+rows = conn.execute("""
+    SELECT property_description, COUNT(*) as cnt
+    FROM raw_sales
+    WHERE property_description IS NOT NULL AND property_description != ''
+    GROUP BY property_description
+    ORDER BY cnt DESC
+    LIMIT 30
+""").fetchall()
+for r in rows:
+    print(f"  {str(r[0]):30s} {r[1]:>10,}")
+
+print()
+print('=' * 60)
+print('CROSS-TAB: property_category x property_description')
+print('=' * 60)
+rows = conn.execute("""
+    SELECT property_category, property_description, COUNT(*) as cnt
+    FROM raw_sales
+    GROUP BY property_category, property_description
+    ORDER BY cnt DESC
+    LIMIT 40
+""").fetchall()
+for r in rows:
+    print(f"  {str(r[0]):10s} | {str(r[1]):30s} | {r[2]:>10,}")
+
+print()
+print('=' * 60)
+print('UNIT_NO / STRATA INDICATORS (sample)')
+print('=' * 60)
+rows = conn.execute("""
+    SELECT property_category, property_description,
+           unit_no, strata_lot_no,
+           COUNT(*) as cnt
+    FROM raw_sales
+    WHERE unit_no IS NOT NULL AND unit_no != ''
+    GROUP BY property_category, property_description, unit_no, strata_lot_no
+    ORDER BY cnt DESC
+    LIMIT 20
+""").fetchall()
+for r in rows:
+    print(f"  cat={str(r[0]):6s} desc={str(r[1]):20s} unit={str(r[2]):10s} strata={str(r[3])}")
+
+print()
+print('=' * 60)
+print('5 SAMPLE ROWS (in-scope suburb if possible)')
+print('=' * 60)
+rows = conn.execute("""
+    SELECT suburb, postcode, property_category, property_description,
+           unit_no, strata_lot_no, zone_code, sale_price, contract_date
+    FROM raw_sales
+    WHERE suburb IN ('NEWTOWN','BONDI','TERRIGAL','MARRICKVILLE','PADDINGTON')
+    LIMIT 5
+""").fetchall()
+for r in rows:
+    print(f"  {r}")
+
+conn.close()
+"@
+
+& $python -c $script
