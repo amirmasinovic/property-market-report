@@ -768,7 +768,7 @@ def build_price_performance(conn, as_of_date: Optional[str] = None) -> int:
     inserted = 0
     for suburb_id, region, suburb, postcode in suburb_rows:
         for pt in ALL_TYPES:
-            type_filter = "" if pt == "ALL" else f"AND property_type = '{pt}'"
+            type_filter = "" if pt == "All" else f"AND property_type = '{pt}'"
             entity_clause = f"suburb_id = {suburb_id} {type_filter}"
 
             r = conn.execute(
@@ -833,7 +833,7 @@ def build_regional_price_performance(conn,
     inserted = 0
     for region in regions:
         for pt in ALL_TYPES:
-            type_filter   = "" if pt == "ALL" else f"AND property_type = '{pt}'"
+            type_filter   = "" if pt == "All" else f"AND property_type = '{pt}'"
             entity_clause = f"region = '{region}' {type_filter}"
 
             r = conn.execute(

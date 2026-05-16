@@ -481,6 +481,51 @@ def _fetch_regional_perf_by_type(conn, region: str) -> dict:
     return result
 
 
+def _fetch_week_sales(conn, suburb_id: int, ref_date: str) -> dict:
+    """Current reporting week sales count per property type.
+    Week = 7 days ending on ref_date. Used for Tile 1 'Sales This Week'."""
+    rows = conn.execute(f"""
+        SELECT property_type, COUNT(*) AS cnt
+        FROM mapped_sales
+        WHERE suburb_id = ?
+          AND contract_date > DATE '{ref_date}' - INTERVAL '7 days'
+          AND contract_date <= DATE '{ref_date}'
+        GROUP BY property_type
+    """, [suburb_id]).fetchall()
+    by_type = {r[0]: r[1] for r in rows}
+    total = conn.execute(f"""
+        SELECT COUNT(*) FROM mapped_sales
+        WHERE suburb_id = ?
+          AND contract_date > DATE '{ref_date}' - INTERVAL '7 days'
+          AND contract_date <= DATE '{ref_date}'
+    """, [suburb_id]).fetchone()[0]
+    by_type["All"] = total
+    return by_type
+
+
+def _fetch_region_week_sales(conn, region: str, ref_date: str) -> dict:
+    """Current reporting week sales count per property type for a region."""
+    rows = conn.execute(f"""
+        SELECT ms.property_type, COUNT(*) AS cnt
+        FROM mapped_sales ms
+        JOIN suburb_ref sr ON ms.suburb_id = sr.suburb_id
+        WHERE sr.region = ?
+          AND ms.contract_date > DATE '{ref_date}' - INTERVAL '7 days'
+          AND ms.contract_date <= DATE '{ref_date}'
+        GROUP BY ms.property_type
+    """, [region]).fetchall()
+    by_type = {r[0]: r[1] for r in rows}
+    total = conn.execute(f"""
+        SELECT COUNT(*) FROM mapped_sales ms
+        JOIN suburb_ref sr ON ms.suburb_id = sr.suburb_id
+        WHERE sr.region = ?
+          AND ms.contract_date > DATE '{ref_date}' - INTERVAL '7 days'
+          AND ms.contract_date <= DATE '{ref_date}'
+    """, [region]).fetchone()[0]
+    by_type["All"] = total
+    return by_type
+
+
 def _fetch_regional_available_types(conn, region: str) -> list:
     rows = conn.execute("""
         SELECT DISTINCT property_type
@@ -497,38 +542,46 @@ def _fetch_regional_available_types(conn, region: str) -> list:
 # Tile builder
 # ─────────────────────────────────────────────
 
-def _build_tiles(rolling: Optional[dict], property_type: str) -> dict:
+def _build_tiles(rolling: Optional[dict], property_type: str,
+                 week_sales: Optional[int] = None) -> dict:
     is_land = property_type == "VACANT LAND"
     window  = rolling.get("window_label") if rolling else None
-    count   = rolling.get("sales_count", 0) if rolling else 0
 
-    # Null out metric values if threshold not met (no window)
+    # Tile 1: always current reporting week sales count — never a rolling window count
+    tile1_val = week_sales  # may be None if no data for this week
+
+    # Tile 2: always rolling median of sale_price — never median_sqm
+    # Tile 3: avg_price for all types EXCEPT Vacant Land which shows median_price_sqm
     median_val = avg_val = None
     if rolling and window:
-        median_val = rolling.get("median_sqm") if is_land else rolling.get("median_price")
-        avg_val    = rolling.get("avg_sqm")    if is_land else rolling.get("avg_price")
+        median_val = rolling.get("median_price")   # always sale price median
+        avg_val    = rolling.get("median_price_sqm") if is_land else rolling.get("avg_price")
 
-    metric_label = "$/sqm" if is_land else "price"
+    tile3_label = "Median price/sqm" if is_land else "Avg sale price"
 
     return {
         "sales_count": {
-            "value":  count,
-            "label":  f"Sales ({window})" if window else "Sales (insufficient data)",
-            "window": window,
+            "value":  tile1_val,
+            "label":  "Sales This Week",
+            "window": None,
+            "sample": rolling.get("sales_count") if rolling else None,
+            "is_caution": rolling.get("is_caution", False) if rolling else False,
         },
         "median": {
             "value":  median_val,
-            "label":  f"Median {metric_label} ({window})" if window
-                      else f"Median {metric_label}",
+            "label":  f"Median price ({window})" if window else "Median price",
             "window": window,
-            "is_sqm": is_land,
+            "is_sqm": False,
+            "sample": rolling.get("sales_count") if rolling else None,
+            "is_caution": rolling.get("is_caution", False) if rolling else False,
         },
         "avg": {
             "value":  avg_val,
-            "label":  f"Avg {metric_label} ({window})" if window
-                      else f"Avg {metric_label}",
+            "label":  f"{tile3_label} ({window})" if window else tile3_label,
             "window": window,
             "is_sqm": is_land,
+            "sample": rolling.get("sales_count") if rolling else None,
+            "is_caution": rolling.get("is_caution", False) if rolling else False,
         },
     }
 
@@ -642,6 +695,12 @@ def export_all(db_path: str, output_dir: str) -> dict:
     generated_at  = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
     current_year  = datetime.utcnow().year
 
+    # Reference date: max contract_date bounded by today (same cap as analytics.py)
+    ref_row = conn.execute(
+        "SELECT MAX(contract_date) FROM mapped_sales WHERE contract_date <= CURRENT_DATE"
+    ).fetchone()
+    ref_date = str(ref_row[0]) if ref_row and ref_row[0] else str(datetime.utcnow().date())
+
     index_data = {
         "generated_at": generated_at,
         "data_source":  "NSW Valuer General confirmed sales",
@@ -670,6 +729,7 @@ def export_all(db_path: str, output_dir: str) -> dict:
             perf_by_type    = _fetch_perf_by_type(conn, sid)
             available_types = _fetch_available_types(conn, sid)
             ytd_by_type     = _fetch_ytd(conn, sid)
+            week_sales_by_type = _fetch_week_sales(conn, sid, ref_date)
 
             card = _headline_card(
                 entry, annual_by_type, rolling_by_type,
@@ -684,8 +744,9 @@ def export_all(db_path: str, output_dir: str) -> dict:
                 rolling  = rolling_by_type.get(pt)
                 perf     = perf_by_type.get(pt)
                 ytd      = ytd_by_type.get(pt)
+                week_cnt = week_sales_by_type.get(pt)
 
-                tiles             = _build_tiles(rolling, pt)
+                tiles             = _build_tiles(rolling, pt, week_sales=week_cnt)
                 narrative_bullets = _generate_narrative(
                     entry["suburb"], annual, perf, pt
                 )
@@ -735,11 +796,13 @@ def export_all(db_path: str, output_dir: str) -> dict:
         # Regional by_type blocks
         reg_by_type: dict = {}
         reg_perf_by_type = _fetch_regional_perf_by_type(conn, region)
+        reg_week_sales   = _fetch_region_week_sales(conn, region, ref_date)
 
         for pt in reg_avail_types:
             annual_r  = reg_annual_by_type.get(pt, [])
             rolling_r = reg_rolling_by_type.get(pt)
             perf_r    = reg_perf_by_type.get(pt)
+            week_cnt_r = reg_week_sales.get(pt)
 
             # Regional YTD
             type_filter = "" if pt == "All" else f"AND property_type = '{pt}'"
@@ -765,7 +828,7 @@ def export_all(db_path: str, output_dir: str) -> dict:
                 }
 
             reg_by_type[pt] = {
-                "tiles": _build_tiles(rolling_r, pt),
+                "tiles": _build_tiles(rolling_r, pt, week_sales=week_cnt_r),
                 "chart": {
                     **_chart_meta(pt),
                     "data": annual_r,

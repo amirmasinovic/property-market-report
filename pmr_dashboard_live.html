@@ -447,7 +447,6 @@ function showRegion(slug){
       +hTypebar(availTypes)
       +hChart('rc', (isVac?'$/sqm':'Median price')+' and volume &middot; '+rName+' &middot; '+typeLbl+' &middot; Annual', false, isVac)
       +'<div class="twocol">'+hNarr(narr)+hPerf(perf, isVac)+'</div>'
-      +hSuburbGrid(rd.suburbs||[], slug)
       +hDriversPlaceholder()
       +'</div>'
       +hFooter();
