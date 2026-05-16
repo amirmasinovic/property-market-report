@@ -105,6 +105,7 @@ def export_excel(db_path: str, output_path: str) -> dict:
                 ms.postcode,
                 ms.region,
                 ms.property_type,
+                ms.zone_code,
                 ms.contract_date,
                 ms.sale_price,
                 ms.land_size_sqm,
@@ -119,7 +120,7 @@ def export_excel(db_path: str, output_path: str) -> dict:
         """).fetchall()
 
         headers = [
-            "Suburb", "Postcode", "Region", "Property Type",
+            "Suburb", "Postcode", "Region", "Property Type", "Zone Code",
             "Contract Date", "Sale Price ($)", "Land Size (sqm)",
             "Price per sqm ($)", "Source File", "Year"
         ]
@@ -138,20 +139,21 @@ def export_excel(db_path: str, output_path: str) -> dict:
     try:
         rows = conn.execute("""
             SELECT
-                suburb, postcode, region, contract_year,
+                suburb, postcode, region, property_type, contract_year,
                 sales_count,
-                ROUND(median_price, 0) AS median_price,
-                ROUND(avg_price, 0)    AS avg_price,
-                min_price, max_price,
-                ROUND(median_land_sqm, 1) AS median_land_sqm
-            FROM annual_suburb_metrics
-            ORDER BY suburb, contract_year
+                ROUND(median_price, 0)     AS median_price,
+                ROUND(avg_price, 0)        AS avg_price,
+                ROUND(median_price_sqm, 2) AS median_price_sqm,
+                ROUND(avg_price_sqm, 2)    AS avg_price_sqm,
+                sqm_record_count
+            FROM annual_metrics
+            ORDER BY suburb, property_type, contract_year
         """).fetchall()
 
         headers = [
-            "Suburb", "Postcode", "Region", "Year",
+            "Suburb", "Postcode", "Region", "Property Type", "Year",
             "Sales Count", "Median Price ($)", "Avg Price ($)",
-            "Min Price ($)", "Max Price ($)", "Median Land (sqm)"
+            "Median $/sqm", "Avg $/sqm", "SQM Record Count"
         ]
         n = add_sheet("Annual Metrics", headers, rows)
         summary["annual_metrics"] = n
@@ -164,26 +166,26 @@ def export_excel(db_path: str, output_path: str) -> dict:
     try:
         rows = conn.execute("""
             SELECT
-                suburb, postcode, region,
-                sales_3m,  ROUND(median_3m, 0),  ROUND(pct_change_3m, 2),
-                sales_12m, ROUND(median_12m, 0), ROUND(pct_change_12m, 2),
-                sales_3y,  ROUND(median_3y, 0),  ROUND(pct_change_3y, 2),
-                sales_5y,  ROUND(median_5y, 0),  ROUND(pct_change_5y, 2),
-                sales_10y, ROUND(median_10y, 0), ROUND(pct_change_10y, 2),
-                sales_20y, ROUND(median_20y, 0), ROUND(pct_change_20y, 2),
+                suburb, postcode, region, property_type,
+                sales_3m,  ROUND(median_3m, 0),  ROUND(nominal_3m, 0),  ROUND(pct_3m, 2),
+                sales_12m, ROUND(median_12m, 0), ROUND(nominal_12m, 0), ROUND(pct_12m, 2),
+                sales_3y,  ROUND(median_3y, 0),  ROUND(nominal_3y, 0),  ROUND(pct_3y, 2),
+                sales_5y,  ROUND(median_5y, 0),  ROUND(nominal_5y, 0),  ROUND(pct_5y, 2),
+                sales_10y, ROUND(median_10y, 0), ROUND(nominal_10y, 0), ROUND(pct_10y, 2),
+                sales_20y, ROUND(median_20y, 0), ROUND(nominal_20y, 0), ROUND(pct_20y, 2),
                 as_of_date
             FROM price_performance
-            ORDER BY suburb
+            ORDER BY suburb, property_type
         """).fetchall()
 
         headers = [
-            "Suburb", "Postcode", "Region",
-            "3m Sales", "3m Median ($)", "3m Change (%)",
-            "12m Sales", "12m Median ($)", "12m Change (%)",
-            "3y Sales", "3y Median ($)", "3y Change (%)",
-            "5y Sales", "5y Median ($)", "5y Change (%)",
-            "10y Sales", "10y Median ($)", "10y Change (%)",
-            "20y Sales", "20y Median ($)", "20y Change (%)",
+            "Suburb", "Postcode", "Region", "Property Type",
+            "3m Sales", "3m Median ($)", "3m Nominal ($)", "3m Change (%)",
+            "12m Sales", "12m Median ($)", "12m Nominal ($)", "12m Change (%)",
+            "3y Sales", "3y Median ($)", "3y Nominal ($)", "3y Change (%)",
+            "5y Sales", "5y Median ($)", "5y Nominal ($)", "5y Change (%)",
+            "10y Sales", "10y Median ($)", "10y Nominal ($)", "10y Change (%)",
+            "20y Sales", "20y Median ($)", "20y Nominal ($)", "20y Change (%)",
             "As Of Date"
         ]
         n = add_sheet("Price Performance", headers, rows)
