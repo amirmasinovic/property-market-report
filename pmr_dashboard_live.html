@@ -421,38 +421,46 @@ function showRegion(slug){
     if(typeData && typeData.tiles){
       var t = typeData.tiles;
       tiles = [
-        {lbl:t.sales_count ? (t.sales_count.label||'Sales') : 'Sales',
-         val:t.sales_count ? (t.sales_count.value != null ? ''+t.sales_count.value : null) : null},
+        {lbl:t.sales_count ? (t.sales_count.label||'Sales This Week') : 'Sales This Week',
+         val:t.sales_count ? (t.sales_count.value != null ? ''+t.sales_count.value : null) : null,
+         sample:t.sales_count ? t.sales_count.sample : null},
         {lbl:t.median ? (t.median.label||'Median') : 'Median',
-         val:t.median ? (t.median.value != null ? fM(t.median.value) : null) : null},
+         val:t.median ? (t.median.value != null ? fM(t.median.value) : null) : null,
+         sample:t.median ? t.median.sample : null},
         {lbl:t.avg ? (t.avg.label||'Avg') : 'Avg',
-         val:t.avg ? (t.avg.value != null ? fM(t.avg.value) : null) : null}
+         val:t.avg ? (t.avg.value != null ? (t.avg.is_sqm ? fM(t.avg.value)+'/sqm' : fM(t.avg.value)) : null) : null,
+         sample:t.avg ? t.avg.sample : null}
       ];
     } else {
-      tiles = [{lbl:'Sales',val:null},{lbl:'Median',val:null},{lbl:'Avg',val:null}];
+      tiles = [{lbl:'Sales This Week',val:null},{lbl:'Median',val:null},{lbl:'Avg',val:null}];
     }
 
     var rName = '';
     for(var ri=0;ri<REGIONS.length;ri++){if(REGIONS[ri].slug===slug){rName=REGIONS[ri].name;break;}}
-    var typeLbl = TYPE_LABELS[activeTypeKey] || activeTypeKey;
+    var typeLbl  = TYPE_LABELS[activeTypeKey] || activeTypeKey;
     var chartObj = typeData ? typeData.chart : null;
     var perf     = typeData ? typeData.price_performance : null;
     var narr     = typeData ? typeData.narrative : null;
-    var genDate  = rd.generated_at ? rd.generated_at.substring(0,10) : null;
+    var drivers  = rd.drivers || null;
+    var partner  = rd.partner || '[Partner Name]';
+    var dataTo   = rd.data_to || (rd.generated_at ? rd.generated_at.substring(0,10) : null);
+    var sample   = typeData && typeData.tiles && typeData.tiles.sales_count ? typeData.tiles.sales_count.sample : null;
+    var availZones = (typeData && typeData.available_zones) ? typeData.available_zones : null;
 
     var html = hHeader(rName+' Regional Summary',
                 rName+', NSW &middot; '+typeLbl,
-                genDate, slug, rd.suburbs||[], null, tiles)
+                dataTo, partner, slug, rd.suburbs||[], null, tiles)
       +'<div class="vi">'
       +hTypebar(availTypes)
+      +hZonebar(availZones)
       +hChart('rc', (isVac?'$/sqm':'Median price')+' and volume &middot; '+rName+' &middot; '+typeLbl+' &middot; Annual', false, isVac)
-      +'<div class="twocol">'+hNarr(narr)+hPerf(perf, isVac)+'</div>'
-      +hDriversPlaceholder()
+      +'<div class="twocol">'+hNarr(narr)+hPerf(perf, sample, isVac)+'</div>'
+      +hDrivers(drivers)
       +'</div>'
-      +hFooter();
+      +hFooter(isVac);
 
     render(html);
-    renderChart('rc', chartObj, null, isVac);
+    renderChart('rc', chartObj, null, drivers, isVac);
   });
 }
 
@@ -469,7 +477,6 @@ function showSuburb(regSlug, subSlug){
     if(serr){ renderError('Could not load suburb data for '+subSlug+'.'); return; }
 
     fetchJSON(regUrl, function(rerr, rd){
-      /* rd may fail – handle gracefully */
       var suburbs = (rd && rd.suburbs) ? rd.suburbs : [];
 
       var availTypes = sd.available_types || ['All'];
@@ -477,20 +484,22 @@ function showSuburb(regSlug, subSlug){
       var typeData = sd.by_type ? sd.by_type[activeTypeKey] : null;
       var isVac    = activeTypeKey === 'VACANT LAND';
 
-      /* tiles */
       var tiles;
       if(typeData && typeData.tiles){
         var t = typeData.tiles;
         tiles = [
-          {lbl:t.sales_count ? (t.sales_count.label||'Sales') : 'Sales',
-           val:t.sales_count ? (t.sales_count.value != null ? ''+t.sales_count.value : null) : null},
+          {lbl:t.sales_count ? (t.sales_count.label||'Sales This Week') : 'Sales This Week',
+           val:t.sales_count ? (t.sales_count.value != null ? ''+t.sales_count.value : null) : null,
+           sample:t.sales_count ? t.sales_count.sample : null},
           {lbl:t.median ? (t.median.label||'Median') : 'Median',
-           val:t.median ? (t.median.value != null ? fM(t.median.value) : null) : null},
+           val:t.median ? (t.median.value != null ? fM(t.median.value) : null) : null,
+           sample:t.median ? t.median.sample : null},
           {lbl:t.avg ? (t.avg.label||'Avg') : 'Avg',
-           val:t.avg ? (t.avg.value != null ? fM(t.avg.value) : null) : null}
+           val:t.avg ? (t.avg.value != null ? (t.avg.is_sqm ? fM(t.avg.value)+'/sqm' : fM(t.avg.value)) : null) : null,
+           sample:t.avg ? t.avg.sample : null}
         ];
       } else {
-        tiles = [{lbl:'Sales',val:null},{lbl:'Median',val:null},{lbl:'Avg',val:null}];
+        tiles = [{lbl:'Sales This Week',val:null},{lbl:'Median',val:null},{lbl:'Avg',val:null}];
       }
 
       var rName    = '';
@@ -499,33 +508,36 @@ function showSuburb(regSlug, subSlug){
       var chartObj = typeData ? typeData.chart : null;
       var perf     = typeData ? typeData.price_performance : null;
       var narr     = typeData ? typeData.narrative : null;
-      var genDate  = sd.generated_at ? sd.generated_at.substring(0,10) : null;
+      var drivers  = sd.drivers || (rd ? rd.drivers : null) || null;
+      var partner  = rd ? (rd.partner || '[Partner Name]') : '[Partner Name]';
+      var dataTo   = sd.data_to || (sd.generated_at ? sd.generated_at.substring(0,10) : null);
+      var sample   = typeData && typeData.tiles && typeData.tiles.sales_count ? typeData.tiles.sales_count.sample : null;
+      var availZones = (typeData && typeData.available_zones) ? typeData.available_zones : null;
 
-      /* region prices overlay (All type only, non-vacant) */
       var regPrices = null;
       if(!isVac && rd && rd.by_type && rd.by_type['All'] && rd.by_type['All'].chart){
         var rcd = buildChartData(rd.by_type['All'].chart);
         var scd = buildChartData(chartObj);
-        /* align region prices to suburb labels */
         regPrices = scd.labels.map(function(yr){
           var idx = rcd.labels.indexOf(yr);
           return idx >= 0 ? rcd.solidPrices[idx] : null;
         });
       }
 
-      var html = hHeader(sd.suburb+' &mdash; Market Report',
-                  rName+', NSW &middot; Postcode '+sd.postcode,
-                  genDate, regSlug, suburbs, subSlug, tiles)
+      var html = hHeader(sd.suburb+' — Market Report',
+                  rName+', NSW · Postcode '+sd.postcode,
+                  dataTo, partner, regSlug, suburbs, subSlug, tiles)
         +'<div class="vi">'
         +hTypebar(availTypes)
-        +hChart('sc', (isVac?'$/sqm':'Median price')+' and volume &middot; '+sd.suburb+' &middot; '+typeLbl+' &middot; Annual', !isVac && !!regPrices, isVac)
-        +'<div class="twocol">'+hNarr(narr)+hPerf(perf, isVac)+'</div>'
-        +hDriversPlaceholder()
+        +hZonebar(availZones)
+        +hChart('sc', (isVac?'$/sqm':'Median price')+' and volume · '+sd.suburb+' · '+typeLbl+' · Annual', !isVac && !!regPrices, isVac)
+        +'<div class="twocol">'+hNarr(narr)+hPerf(perf, sample, isVac)+'</div>'
+        +hDrivers(drivers)
         +'</div>'
-        +hFooter();
+        +hFooter(isVac);
 
       render(html);
-      renderChart('sc', chartObj, regPrices, isVac);
+      renderChart('sc', chartObj, regPrices, drivers, isVac);
     });
   });
 }
